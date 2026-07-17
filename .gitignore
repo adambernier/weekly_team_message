@@ -1,0 +1,16 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Screenshots and generated files
+*.png
+debug_*.png
+
+# Local environment variables
+.env
