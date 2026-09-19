@@ -131,14 +131,13 @@ def find_lines_and_screenshot(page, output_path, debug=False):
         _dump_page(page, "debug_after_game.png")
 
     # Click the "lines" tab on the game detail page
-    try:
-        page.locator('text="lines"').first.click(timeout=5000)
-        page.wait_for_timeout(3000)
-        if debug:
-            print(f"DEBUG after clicking lines tab — url: {page.url!r}", file=sys.stderr)
-    except Exception:
-        print("No lines have been set.", file=sys.stderr)
-        sys.exit(0)
+    lines_tab = page.locator(':text-is("lines"):visible').first
+    lines_tab.wait_for(state="visible", timeout=15000)
+    # BenchApp's onboarding overlay can intercept pointer clicks on this tab.
+    lines_tab.dispatch_event("click")
+    page.wait_for_timeout(3000)
+    if debug:
+        print(f"DEBUG after clicking lines tab — url: {page.url!r}", file=sys.stderr)
 
     # Override CSS to allow player names to wrap instead of truncate
     page.add_style_tag(content="""
