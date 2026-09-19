@@ -12,8 +12,11 @@ from datetime import date, datetime
 from playwright.sync_api import sync_playwright
 
 TEAM_NAME = "Wobblin Goblins"
+# The league site spells our team "Woblin Goblins" (single 'b'), so accept any of
+# these spellings when matching a scraped name against ours.
+TEAM_NAME_VARIANTS = ("Wobblin Goblins", "Woblin Goblins")
 LOGIN_URL = "https://apps.daysmartrecreation.com/dash/x/tspc/login"
-TEAM_URL = "https://apps.daysmartrecreation.com/dash/x/tspc/teams/9830"
+TEAM_URL = "https://apps.daysmartrecreation.com/dash/x/tspc/teams/10757"
 
 EMAIL = os.environ.get("DAYSMART_EMAIL")
 PASSWORD = os.environ.get("DAYSMART_PASSWORD")
@@ -156,6 +159,23 @@ def extract_locker_room_number(location):
     return m.group(1) if m else None
 
 
+def normalize_team_name(name):
+    """Lowercase a team name and drop everything that isn't a letter."""
+    return re.sub(r"[^a-z]", "", name.lower())
+
+
+def is_our_team(name):
+    """Return True if a scraped team name refers to the Wobblin Goblins.
+
+    Compares on the normalized form so case, punctuation, and the league site's
+    one-'b' spelling don't matter.
+    """
+    normalized = normalize_team_name(name)
+    if not normalized:
+        return False
+    return any(normalize_team_name(v) in normalized for v in TEAM_NAME_VARIANTS)
+
+
 def scrape_next_game(page, debug=False):
     """Load team page, collect game and locker room events, return the next game."""
     page.goto(TEAM_URL, wait_until="domcontentloaded", timeout=60000)
@@ -201,7 +221,14 @@ def scrape_next_game(page, debug=False):
 
     next_date = min(games.keys())
     next_game = games[next_date]
-    next_game["is_home"] = TEAM_NAME.lower() in next_game["home"].lower()
+    next_game["is_home"] = is_our_team(next_game["home"])
+    if not next_game["is_home"] and not is_our_team(next_game["away"]):
+        # Don't quietly report "away team" for a game we can't match.
+        print(
+            f"Warning: could not find {TEAM_NAME} in "
+            f"{next_game['home']!r} vs {next_game['away']!r}; assuming away team.",
+            file=sys.stderr,
+        )
     next_game["locker_room"] = lockers.get(next_date)
 
     if debug:
@@ -247,13 +274,14 @@ def _capture_lines_screenshot(debug=False):
         cmd.append("--debug")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        lines_path = result.stdout.strip()
+    lines_path = result.stdout.strip()
+    if result.returncode == 0 and lines_path and os.path.isfile(lines_path):
         print(f"Lines screenshot saved: {lines_path}", file=sys.stderr)
     elif "No lines have been set" in result.stderr:
         print("Lines: not yet set in BenchApp.", file=sys.stderr)
     else:
-        print(f"Lines screenshot failed:\n{result.stderr}", file=sys.stderr)
+        detail = result.stderr.strip() or "No screenshot file was produced."
+        print(f"Lines screenshot failed:\n{detail}", file=sys.stderr)
 
     if debug and result.stderr:
         print(result.stderr, file=sys.stderr)
